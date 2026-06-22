@@ -1,0 +1,26 @@
+{
+  "name": "substore-scripts",
+  "version": "1.0.0",
+  "description": "Mihomo/Clash 覆写后处理脚本：将 HuggingFace 拆分为独立 proxy group，默认选中「AI服务」。配合 powerfullz/override-rules 使用。",
+  "main": "huggingface.js",
+  "scripts": {
+    "build": "esbuild huggingface.js --minify --legal-comments=none --outfile=huggingface.min.js",
+    "format": "prettier --write \"*.{js,json,md}\"",
+    "test": "node ./test/smoke.test.js"
+  },
+  "keywords": [
+    "mihomo",
+    "clash",
+    "substore",
+    "override",
+    "huggingface",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "packageManager": "pnpm@10.17.1",
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "prettier": "^3.3.3"
+  }
+}

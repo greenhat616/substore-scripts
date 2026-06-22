@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 从 git tag (v*) 同步版本号到 package.json，与 override-rules 流程一致
+      - name: Sync version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm pkg set version="$VERSION"
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build minified script
+        run: pnpm run build
+
+      # 将构建产物提交回仓库，使 jsDelivr 可直接引用 huggingface.min.js
+      - name: Commit build artifacts
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add huggingface.min.js package.json
+          git commit -m "chore(release): ${GITHUB_REF_NAME}" || echo "nothing to commit"
+          git push origin HEAD:main || echo "nothing to push"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            huggingface.js
+            huggingface.min.js
