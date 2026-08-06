@@ -5,8 +5,8 @@
  * （Clash Verge Rev / Mihomo Party / Sparkle 均支持脚本链式执行）。
  *
  * 入参 config 为完整 Mihomo 配置对象，本脚本遍历 config.proxies：
- *   若节点类型为 socks5 / http，且名称命中疑似家宽/落地节点关键词，
- *   则为其添加 `dialer-proxy: 前置代理`，使该落地节点经「前置代理」分组中转。
+ *   若节点协议为 socks5 / http，或名称命中疑似家宽/落地节点关键词，
+ *   满足其一即为其添加 `dialer-proxy: 前置代理`，使该节点经「前置代理」分组中转。
  *
  * 幂等：重复执行只是重复赋同样的值，不会产生副作用。
  */
@@ -14,15 +14,15 @@
 /** dialer-proxy 指向的分组/节点名称 */
 const DIALER_PROXY = "前置代理";
 
-/** 仅对以下类型的节点注入 dialer-proxy（家宽/落地节点常见协议） */
+/** 命中以下协议的节点直接注入 dialer-proxy（家宽/落地节点常见协议） */
 const TARGET_TYPES = ["socks5", "http"];
 
 /** 疑似家宽/落地节点的名称关键词（不区分大小写） */
 const SUSPECT_NAME_REGEX = /家宽|住宅|原生|落地/i;
 
 /**
- * 判断节点是否为「疑似家宽/落地节点」：
- * 协议为 socks5 / http，且名称命中关键词。
+ * 判断节点是否需要注入 dialer-proxy：
+ * 协议为 socks5 / http，或名称命中疑似家宽/落地节点关键词，满足其一即可。
  *
  * @param {Record<string, any>} proxy
  * @returns {boolean}
@@ -31,7 +31,7 @@ function isSuspectLandingProxy(proxy) {
   if (!proxy || typeof proxy !== "object") return false;
 
   const type = typeof proxy.type === "string" ? proxy.type.toLowerCase() : "";
-  if (!TARGET_TYPES.includes(type)) return false;
+  if (TARGET_TYPES.includes(type)) return true;
 
   const name = typeof proxy.name === "string" ? proxy.name : "";
   return SUSPECT_NAME_REGEX.test(name);
