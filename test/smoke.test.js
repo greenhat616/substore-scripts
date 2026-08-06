@@ -7,6 +7,7 @@
 
 const assert = require("node:assert");
 const main = require("../huggingface.js");
+const dialerProxy = require("../dialer-proxy-qianzhi.js");
 
 function fakeConfig() {
   return {
@@ -77,6 +78,40 @@ function fakeConfig() {
   assert.strictEqual(hf.proxies[0], "AI服务");
   // 无 category-ai-!cn 时规则前置
   assert.strictEqual(out.rules[0], "GEOSITE,huggingface,HuggingFace");
+}
+
+console.log("✓ huggingface smoke tests passed");
+
+// ── dialer-proxy-qianzhi.js ────────────────────────────────────────────────
+
+// 4. 命中条件：socks5/http 且名称含家宽关键词 → 注入 dialer-proxy
+{
+  const cfg = {
+    proxies: [
+      { name: "日本家宽落地", type: "socks5", server: "1.2.3.4" },
+      { name: "美国住宅IP", type: "http", server: "5.6.7.8" },
+      { name: "香港原生节点", type: "socks5" },
+      { name: "新加坡直连", type: "socks5" }, // 名称不命中 → 不注入
+      { name: "家宽但协议不对", type: "ss" }, // 协议不命中 → 不注入
+      { name: "普通trojan", type: "trojan" },
+    ],
+  };
+  const out = dialerProxy(cfg);
+  assert.strictEqual(out.proxies[0]["dialer-proxy"], "前置代理");
+  assert.strictEqual(out.proxies[1]["dialer-proxy"], "前置代理");
+  assert.strictEqual(out.proxies[2]["dialer-proxy"], "前置代理");
+  assert.ok(!("dialer-proxy" in out.proxies[3]), "名称不命中不应注入");
+  assert.ok(!("dialer-proxy" in out.proxies[4]), "协议不命中不应注入");
+  assert.ok(!("dialer-proxy" in out.proxies[5]), "普通节点不应注入");
+}
+
+// 5. 健壮性：缺失/异常输入不抛错
+{
+  assert.strictEqual(dialerProxy(null), null);
+  const cfg = { proxies: null };
+  assert.strictEqual(dialerProxy(cfg), cfg);
+  const out = dialerProxy({ proxies: [{ name: "家宽", type: "SOCKS5" }] });
+  assert.strictEqual(out.proxies[0]["dialer-proxy"], "前置代理", "协议大小写不敏感");
 }
 
 console.log("✓ all smoke tests passed");
