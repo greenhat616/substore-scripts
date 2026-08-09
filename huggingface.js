@@ -22,12 +22,16 @@ const AI_SERVICE_GROUP = "AI服务";
 /** convert.js 中 PROXY_GROUPS.SELECT / MANUAL（仅在缺失 AI 分组时作兜底候选） */
 const PROXY_GROUPS_SELECT = "选择代理";
 const PROXY_GROUPS_MANUAL = "手动选择";
+/** convert.js 中 PROXY_GROUPS.FINAL（分组插入位置的兜底锚点） */
+const FINAL_GROUP = "Final";
 
 /**
- * HuggingFace 分组专属图标 —— HuggingFace 官方 Logo（彩色 SVG）。
- * Koolson/Qure 图标集无 HF 图标，故采用官方资源；可自行替换为其它图标集链接。
+ * HuggingFace 分组专属图标 —— HuggingFace 官方 Logo（PNG）。
+ * Koolson/Qure 图标集无 HF 图标，故爬取官方 SVG 存至本仓库 icons/ 目录并渲染
+ * 为 PNG（SVG 为原始素材，见 icons/huggingface.svg）；可自行替换为其它图标集链接。
  */
-const HUGGINGFACE_ICON = "https://huggingface.co/front/assets/huggingface_logo-noborder.svg";
+const HUGGINGFACE_ICON =
+  "https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/icons/huggingface.png";
 
 /**
  * @param {Record<string, any>} config convert.js 生成的完整 Mihomo 配置
@@ -63,10 +67,14 @@ function main(config) {
       proxies: hfProxies, // select 类型默认选中数组首项 → AI服务
     };
 
-    // 紧跟在「AI服务」之后插入，保持分组顺序直观；找不到则追加到末尾。
+    // 插入位置逐级回退：「AI服务」之前 → 「Final」之前 → 末尾。
     const aiIndex = groups.findIndex((g) => g && g.name === AI_SERVICE_GROUP);
-    if (aiIndex >= 0) groups.splice(aiIndex + 1, 0, hfGroup);
-    else groups.push(hfGroup);
+    if (aiIndex >= 0) groups.splice(aiIndex, 0, hfGroup);
+    else {
+      const finalIndex = groups.findIndex((g) => g && g.name === FINAL_GROUP);
+      if (finalIndex >= 0) groups.splice(finalIndex, 0, hfGroup);
+      else groups.push(hfGroup);
+    }
   }
 
   // ── 2. 新增 huggingface 分流规则 ────────────────────────────────────────

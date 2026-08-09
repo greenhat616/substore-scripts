@@ -7,6 +7,8 @@
 
 const assert = require("node:assert");
 const main = require("../huggingface.js");
+const tailscale = require("../tailscale.js");
+const meta = require("../meta.js");
 const dialerProxy = require("../dialer-proxy-qianzhi.js");
 
 function fakeConfig() {
@@ -43,9 +45,9 @@ function fakeConfig() {
     "候选项应为 [AI服务, 选择代理, 地区节点…, 手动选择, DIRECT]"
   );
 
-  // HuggingFace 分组应紧跟 AI服务 之后
+  // HuggingFace 分组应插在 AI服务 之前
   const names = out["proxy-groups"].map((g) => g.name);
-  assert.strictEqual(names.indexOf("HuggingFace"), names.indexOf("AI服务") + 1);
+  assert.strictEqual(names.indexOf("HuggingFace") + 1, names.indexOf("AI服务"));
 
   // 规则应插入到 category-ai-!cn 之前
   const idxHF = out.rules.indexOf("GEOSITE,huggingface,HuggingFace");
@@ -69,8 +71,18 @@ function fakeConfig() {
   assert.strictEqual(hfRuleCount, 1, "重复执行不应产生重复规则");
 }
 
-// 3. 缺失 AI服务 分组时的回退
+// 3. 缺失 AI服务 分组时的回退：Final 之前 → 末尾
 {
+  // 有 Final 分组时插到其之前
+  const cfgWithFinal = {
+    "proxy-groups": [{ name: "选择代理", type: "select", proxies: ["DIRECT"] }, { name: "Final", type: "select", proxies: ["DIRECT"] }],
+    rules: ["MATCH,Final"],
+  };
+  const outF = main(cfgWithFinal);
+  const namesF = outF["proxy-groups"].map((g) => g.name);
+  assert.strictEqual(namesF.indexOf("HuggingFace") + 1, namesF.indexOf("Final"), "无 AI服务 时应插在 Final 之前");
+
+  // 均无则追加到末尾
   const cfg = { "proxy-groups": [], rules: ["MATCH,Final"] };
   const out = main(cfg);
   const hf = out["proxy-groups"].find((g) => g.name === "HuggingFace");
@@ -82,9 +94,171 @@ function fakeConfig() {
 
 console.log("✓ huggingface smoke tests passed");
 
+// ── tailscale.js ─────────────────────────────────────────────────────────────
+
+function fakeConfigTS() {
+  return {
+    proxies: [{ name: "node-1" }],
+    "proxy-groups": [
+      {
+        name: "选择代理",
+        type: "select",
+        proxies: ["自动选择", "香港节点", "手动选择", "DIRECT"],
+      },
+      { name: "SSH", type: "select", proxies: ["选择代理", "DIRECT"] },
+      { name: "Final", type: "select", proxies: ["选择代理", "DIRECT"] },
+    ],
+    rules: [
+      "GEOSITE,category-ai-!cn,AI服务",
+      "GEOSITE,cn,直连",
+      "GEOIP,CN,直连",
+      "MATCH,Final",
+    ],
+  };
+}
+
+// 4. 基本改造
+{
+  const out = tailscale(fakeConfigTS());
+  const ts = out["proxy-groups"].find((g) => g.name === "Tailscale");
+  assert.ok(ts, "应新增 Tailscale 分组");
+  assert.strictEqual(ts.type, "select");
+  assert.strictEqual(ts.proxies[0], "DIRECT", "默认选中项应为 DIRECT");
+  assert.ok(/tailscale/i.test(ts.icon), "应使用 Tailscale 专属图标");
+  // 候选项应继承「选择代理」分组的动态地区节点列表，DIRECT 提前且不重复
+  assert.deepStrictEqual(
+    ts.proxies,
+    ["DIRECT", "自动选择", "香港节点", "手动选择"],
+    "候选项应为 [DIRECT, …选择代理候选项（去重 DIRECT）]"
+  );
+
+  // Tailscale 分组应插在 SSH 之前
+  const names = out["proxy-groups"].map((g) => g.name);
+  assert.strictEqual(names.indexOf("Tailscale") + 1, names.indexOf("SSH"));
+
+  // 规则应插入到 GEOSITE,cn 之前
+  const idxTS = out.rules.indexOf("GEOSITE,tailscale,Tailscale");
+  const idxCN = out.rules.findIndex((r) => r.startsWith("GEOSITE,cn,"));
+  assert.ok(idxTS >= 0 && idxTS < idxCN, "tailscale 规则应在 GEOSITE,cn 之前");
+}
+
+// 5. 幂等：重复执行不产生重复分组/规则
+{
+  let out = tailscale(fakeConfigTS());
+  out = tailscale(out);
+  const tsGroups = out["proxy-groups"].filter((g) => g.name === "Tailscale");
+  assert.strictEqual(tsGroups.length, 1, "重复执行不应产生重复分组");
+  const tsRuleCount = out.rules.filter((r) => r === "GEOSITE,tailscale,Tailscale").length;
+  assert.strictEqual(tsRuleCount, 1, "重复执行不应产生重复规则");
+}
+
+// 6. 缺失锚点分组 / 无 GEOSITE,cn 规则时的回退
+{
+  // 无 SSH 但有 Final 时插到 Final 之前
+  const cfgFinal = {
+    "proxy-groups": [{ name: "Final", type: "select", proxies: ["DIRECT"] }],
+    rules: ["MATCH,Final"],
+  };
+  const outF = tailscale(cfgFinal);
+  const namesF = outF["proxy-groups"].map((g) => g.name);
+  assert.strictEqual(namesF.indexOf("Tailscale") + 1, namesF.indexOf("Final"), "无 SSH 时应插在 Final 之前");
+
+  // 均无则追加到末尾
+  const cfg = { "proxy-groups": [], rules: ["MATCH,Final"] };
+  const out = tailscale(cfg);
+  const ts = out["proxy-groups"].find((g) => g.name === "Tailscale");
+  assert.ok(ts, "无锚点分组时仍应创建 Tailscale 分组");
+  assert.strictEqual(ts.proxies[0], "DIRECT");
+  assert.strictEqual(out["proxy-groups"][out["proxy-groups"].length - 1].name, "Tailscale");
+  // 无 GEOSITE,cn 时规则置于最终 MATCH 之前
+  assert.strictEqual(out.rules[0], "GEOSITE,tailscale,Tailscale");
+  assert.strictEqual(out.rules[1], "MATCH,Final");
+}
+
+console.log("✓ tailscale smoke tests passed");
+
+// ── meta.js ──────────────────────────────────────────────────────────────────
+
+function fakeConfigMeta() {
+  return {
+    proxies: [{ name: "node-1" }],
+    "proxy-groups": [
+      {
+        name: "选择代理",
+        type: "select",
+        proxies: ["自动选择", "香港节点", "手动选择", "DIRECT"],
+      },
+      { name: "SSH", type: "select", proxies: ["选择代理", "DIRECT"] },
+      { name: "Final", type: "select", proxies: ["选择代理", "DIRECT"] },
+    ],
+    rules: [
+      "GEOSITE,twitter,Twitter",
+      "RULE-SET,GFWList,选择代理",
+      "GEOIP,cn,DIRECT",
+      "MATCH,Final",
+    ],
+  };
+}
+
+// 7. 基本改造
+{
+  const out = meta(fakeConfigMeta());
+  const mg = out["proxy-groups"].find((g) => g.name === "Meta");
+  assert.ok(mg, "应新增 Meta 分组");
+  assert.strictEqual(mg.type, "select");
+  assert.strictEqual(mg.proxies[0], "选择代理", "默认选中项应为 选择代理");
+  assert.ok(/meta/i.test(mg.icon), "应使用 Meta 专属图标");
+  // 候选项应继承「选择代理」分组的动态地区节点列表
+  assert.deepStrictEqual(
+    mg.proxies,
+    ["选择代理", "自动选择", "香港节点", "手动选择", "DIRECT"],
+    "候选项应为 [选择代理, 地区节点…, 手动选择, DIRECT]"
+  );
+
+  // Meta 分组应插在 SSH 之前
+  const names = out["proxy-groups"].map((g) => g.name);
+  assert.strictEqual(names.indexOf("Meta") + 1, names.indexOf("SSH"));
+
+  // 规则应插入到 GFWList 兜底规则之前
+  const idxMeta = out.rules.indexOf("GEOSITE,meta,Meta");
+  const idxGFW = out.rules.findIndex((r) => r.startsWith("RULE-SET,GFWList,"));
+  assert.ok(idxMeta >= 0 && idxMeta < idxGFW, "meta 规则应在 GFWList 之前");
+}
+
+// 8. 幂等：重复执行不产生重复分组/规则
+{
+  let out = meta(fakeConfigMeta());
+  out = meta(out);
+  const metaGroups = out["proxy-groups"].filter((g) => g.name === "Meta");
+  assert.strictEqual(metaGroups.length, 1, "重复执行不应产生重复分组");
+  const metaRuleCount = out.rules.filter((r) => r === "GEOSITE,meta,Meta").length;
+  assert.strictEqual(metaRuleCount, 1, "重复执行不应产生重复规则");
+}
+
+// 9. 缺失锚点分组 / 无 GFWList 规则时的逐级回退
+{
+  // 无 GFWList 但有 GEOIP,cn 时规则插到其之前
+  const cfgGeoip = { "proxy-groups": [], rules: ["GEOIP,cn,DIRECT", "MATCH,Final"] };
+  const outG = meta(cfgGeoip);
+  assert.strictEqual(outG.rules[0], "GEOSITE,meta,Meta");
+  assert.strictEqual(outG.rules[1], "GEOIP,cn,DIRECT");
+
+  // 仅有 MATCH 时规则插到其之前；无锚点分组时追加到末尾
+  const cfg = { "proxy-groups": [], rules: ["MATCH,Final"] };
+  const out = meta(cfg);
+  assert.strictEqual(out.rules[0], "GEOSITE,meta,Meta");
+  assert.strictEqual(out.rules[1], "MATCH,Final");
+  const mg = out["proxy-groups"].find((g) => g.name === "Meta");
+  assert.ok(mg, "无锚点分组时仍应创建 Meta 分组");
+  assert.strictEqual(mg.proxies[0], "选择代理");
+  assert.strictEqual(out["proxy-groups"][out["proxy-groups"].length - 1].name, "Meta");
+}
+
+console.log("✓ meta smoke tests passed");
+
 // ── dialer-proxy-qianzhi.js ────────────────────────────────────────────────
 
-// 4. 命中条件：socks5/http 或名称含家宽关键词，满足其一即注入 dialer-proxy
+// 10. 命中条件：socks5/http 或名称含家宽关键词，满足其一即注入 dialer-proxy
 {
   const cfg = {
     proxies: [
@@ -103,7 +277,7 @@ console.log("✓ huggingface smoke tests passed");
   assert.ok(!("dialer-proxy" in out.proxies[4]), "均不命中不应注入");
 }
 
-// 5. 健壮性：缺失/异常输入不抛错
+// 11. 健壮性：缺失/异常输入不抛错
 {
   assert.strictEqual(dialerProxy(null), null);
   const cfg = { proxies: null };
