@@ -9,6 +9,7 @@ const assert = require("node:assert");
 const main = require("../huggingface.js");
 const tailscale = require("../tailscale.js");
 const meta = require("../meta.js");
+const nodeseek = require("../nodeseek.js");
 const dialerProxy = require("../dialer-proxy-qianzhi.js");
 
 function fakeConfig() {
@@ -256,9 +257,109 @@ function fakeConfigMeta() {
 
 console.log("✓ meta smoke tests passed");
 
+// ── nodeseek.js ──────────────────────────────────────────────────────────────
+
+function fakeConfigNS() {
+  return {
+    proxies: [{ name: "node-1" }],
+    "proxy-groups": [
+      {
+        name: "选择代理",
+        type: "select",
+        proxies: ["自动选择", "香港节点", "手动选择", "DIRECT"],
+      },
+      { name: "SSH", type: "select", proxies: ["选择代理", "DIRECT"] },
+      { name: "Final", type: "select", proxies: ["选择代理", "DIRECT"] },
+      {
+        name: "GLOBAL",
+        type: "select",
+        "include-all": true,
+        proxies: ["选择代理", "SSH", "Final"],
+      },
+    ],
+    rules: [
+      "GEOSITE,twitter,Twitter",
+      "RULE-SET,GFWList,选择代理",
+      "GEOIP,cn,DIRECT",
+      "MATCH,Final",
+    ],
+  };
+}
+
+// 10. 基本改造：分组 / 规则 / rule-provider / GLOBAL 挂载
+{
+  const out = nodeseek(fakeConfigNS());
+  const ns = out["proxy-groups"].find((g) => g.name === "NodeSeek");
+  assert.ok(ns, "应新增 NodeSeek 分组");
+  assert.strictEqual(ns.type, "select");
+  assert.strictEqual(ns.proxies[0], "选择代理", "默认选中项应为 选择代理");
+  assert.ok(/nodeseek/i.test(ns.icon), "应使用 NodeSeek 专属图标");
+  // 候选项应继承「选择代理」分组的动态地区节点列表
+  assert.deepStrictEqual(
+    ns.proxies,
+    ["选择代理", "自动选择", "香港节点", "手动选择", "DIRECT"],
+    "候选项应为 [选择代理, 地区节点…, 手动选择, DIRECT]"
+  );
+
+  // NodeSeek 分组应插在 SSH 之前
+  const names = out["proxy-groups"].map((g) => g.name);
+  assert.strictEqual(names.indexOf("NodeSeek") + 1, names.indexOf("SSH"));
+
+  // Nyanpasu 兼容：GLOBAL 分组 proxies 应挂载 NodeSeek（首位）且不重复
+  const globalGroup = out["proxy-groups"].find((g) => g.name === "GLOBAL");
+  assert.strictEqual(globalGroup.proxies[0], "NodeSeek", "NodeSeek 应挂载到 GLOBAL 首位");
+
+  // 应新增 rule-provider「nodeseek」
+  const provider = out["rule-providers"] && out["rule-providers"].nodeseek;
+  assert.ok(provider, "应新增 nodeseek rule-provider");
+  assert.strictEqual(provider.behavior, "domain");
+  assert.strictEqual(provider.format, "yaml");
+  assert.ok(provider.url.endsWith("/rulesets/nodeseek.yml"), "rule-provider 应指向 nodeseek ruleset");
+
+  // 规则应插入到 GFWList 兜底规则之前
+  const idxNS = out.rules.indexOf("RULE-SET,nodeseek,NodeSeek");
+  const idxGFW = out.rules.findIndex((r) => r.startsWith("RULE-SET,GFWList,"));
+  assert.ok(idxNS >= 0 && idxNS < idxGFW, "nodeseek 规则应在 GFWList 之前");
+}
+
+// 11. 幂等：重复执行不产生重复分组/规则/provider/GLOBAL 挂载
+{
+  let out = nodeseek(fakeConfigNS());
+  out = nodeseek(out);
+  const nsGroups = out["proxy-groups"].filter((g) => g.name === "NodeSeek");
+  assert.strictEqual(nsGroups.length, 1, "重复执行不应产生重复分组");
+  const nsRuleCount = out.rules.filter((r) => r === "RULE-SET,nodeseek,NodeSeek").length;
+  assert.strictEqual(nsRuleCount, 1, "重复执行不应产生重复规则");
+  assert.strictEqual(Object.keys(out["rule-providers"]).length, 1, "重复执行不应产生重复 provider");
+  const globalGroup = out["proxy-groups"].find((g) => g.name === "GLOBAL");
+  assert.strictEqual(
+    globalGroup.proxies.filter((p) => p === "NodeSeek").length,
+    1,
+    "重复执行不应在 GLOBAL 中重复挂载"
+  );
+}
+
+// 12. 缺失锚点分组 / 无 GFWList 规则 / 无 GLOBAL 时的逐级回退
+{
+  // 无 SSH 但有 Final 时插到 Final 之前；仅有 MATCH 时规则插到其之前
+  const cfg = {
+    "proxy-groups": [{ name: "Final", type: "select", proxies: ["DIRECT"] }],
+    rules: ["GEOIP,cn,DIRECT", "MATCH,Final"],
+  };
+  const out = nodeseek(cfg);
+  const names = out["proxy-groups"].map((g) => g.name);
+  assert.strictEqual(names.indexOf("NodeSeek") + 1, names.indexOf("Final"), "无 SSH 时应插在 Final 之前");
+  assert.strictEqual(out.rules[0], "RULE-SET,nodeseek,NodeSeek");
+  assert.strictEqual(out.rules[1], "GEOIP,cn,DIRECT");
+  // 无 GLOBAL 分组时不应抛错
+  assert.ok(!out["proxy-groups"].some((g) => g.name === "GLOBAL"));
+}
+
+console.log("✓ nodeseek smoke tests passed");
+
 // ── dialer-proxy-qianzhi.js ────────────────────────────────────────────────
 
-// 10. 命中条件：socks5/http 或名称含家宽关键词，满足其一即注入 dialer-proxy
+// 13. 命中条件：socks5/http 或名称含家宽关键词，满足其一即注入 dialer-proxy
 {
   const cfg = {
     proxies: [
@@ -277,7 +378,7 @@ console.log("✓ meta smoke tests passed");
   assert.ok(!("dialer-proxy" in out.proxies[4]), "均不命中不应注入");
 }
 
-// 11. 健壮性：缺失/异常输入不抛错
+// 14. 健壮性：缺失/异常输入不抛错
 {
   assert.strictEqual(dialerProxy(null), null);
   const cfg = { proxies: null };

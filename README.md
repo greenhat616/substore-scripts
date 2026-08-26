@@ -1,4 +1,4 @@
-# substore-scripts · HuggingFace / Tailscale / Meta 独立分组
+# substore-scripts · HuggingFace / Tailscale / Meta / NodeSeek 独立分组
 
 Mihomo / Clash 全局覆写「**后处理脚本**」。在 [`powerfullz/override-rules`](https://github.com/powerfullz/override-rules) 的 `convert.js` **之后**链式执行，在其生成的配置基础上做最小改造。
 
@@ -29,6 +29,16 @@ Mihomo / Clash 全局覆写「**后处理脚本**」。在 [`powerfullz/override
 >
 > 图标：Koolson/Qure、Orz-3/mini 等主流图标集均无 Meta 图标（仅有 Facebook / Instagram 单服务图标），故爬取官方品牌 Logomark（Simple Icons 收录）存至本仓库 [`icons/`](icons) 并渲染为 PNG（SVG 为原始素材），经 jsDelivr 引用。
 
+## nodeseek.js · NodeSeek 独立分组
+
+1. 新增 **「NodeSeek」** proxy group（`type: select`），**默认选中「选择代理」**，分组插在「SSH」之前（缺失则按上方回退链）。覆盖 NodeSeek 主站及其衍生服务（NodeImage / NodeGet / NodeQuality / DeepFlood 等）——上游 `convert.js` 无 NodeSeek 专属规则，这些流量原本由 GFWList 兜底到「选择代理」，故默认行为与拆分前一致（候选项继承「选择代理」的动态地区节点列表）。
+2. 新增 rule-provider「nodeseek」（`behavior: domain`，`format: yaml`）与 `RULE-SET,nodeseek` 分流规则，置于 `RULE-SET,GFWList` 之前（逐级回退：`GEOIP,cn` / `GEOSITE,cn` → 最终 `MATCH`）。
+3. **Nyanpasu 兼容**：`convert.js` 生成的 GLOBAL 分组 `proxies` 为固定快照（不含后处理新增分组），本脚本将「NodeSeek」显式挂载到 GLOBAL 分组的 `proxies` 首位，否则 Nyanpasu 在 GLOBAL 模式下无法选中该分组。
+
+> ruleset 来源（域名集合：`nodeseek.com`、`nodeseek.org`、`nodeimage.com`、`nodeget.com`、`nodequality.com`、`deepflood.com`、`ilatency.com`、`seek.li`、`22112211.xyz`）：[clash-rulesets/nodeseek.yml](https://clash-rulesets.greenhat616.deno.net/rulesets/nodeseek.yml)。
+>
+> 图标：主流图标集均无 NodeSeek 图标，故爬取官方 favicon（512px PNG，已确认背景透明）存至本仓库 [`icons/`](icons)，经 jsDelivr 引用。
+
 ## 工作原理
 
 `convert.js` 用 `GEOSITE,category-ai-!cn,AI服务` 把全部 AI 服务（含 huggingface）路由到「AI服务」分组。本脚本不改动原逻辑，仅：
@@ -50,6 +60,7 @@ Mihomo / Clash 全局覆写「**后处理脚本**」。在 [`powerfullz/override
 https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/huggingface.min.js
 https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/tailscale.min.js
 https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/meta.min.js
+https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/nodeseek.min.js
 ```
 
 版本化引用：
@@ -62,19 +73,24 @@ https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts@v1.0.0/huggingface.min.
 
 ## 自定义
 
-编辑 `huggingface.js` / `tailscale.js` / `meta.js` 顶部常量：
+编辑 `huggingface.js` / `tailscale.js` / `meta.js` / `nodeseek.js` 顶部常量：
 
-| 常量                | 说明                                                |
-| ------------------- | --------------------------------------------------- |
-| `HUGGINGFACE_GROUP` | 新分组名称（默认 `HuggingFace`）                    |
-| `AI_SERVICE_GROUP`  | 对应 `convert.js` 的 AI 分组名（默认 `AI服务`）     |
-| `HUGGINGFACE_ICON`  | HuggingFace 分组图标（默认官方 Logo）               |
-| `TAILSCALE_GROUP`   | 新分组名称（默认 `Tailscale`）                      |
-| `TAILSCALE_ICON`    | Tailscale 分组图标（默认本仓库爬取的官方 Logomark） |
-| `META_GROUP`        | 新分组名称（默认 `Meta`）                           |
-| `META_ICON`         | Meta 分组图标（默认本仓库爬取的官方 Logomark）      |
-| `SSH_GROUP`         | 分组插入的优先锚点（默认 `SSH`，huggingface 除外）  |
-| `FINAL_GROUP`       | 分组插入的兜底锚点（默认 `Final`）                  |
+| 常量                   | 说明                                                |
+| ---------------------- | --------------------------------------------------- |
+| `HUGGINGFACE_GROUP`    | 新分组名称（默认 `HuggingFace`）                    |
+| `AI_SERVICE_GROUP`     | 对应 `convert.js` 的 AI 分组名（默认 `AI服务`）     |
+| `HUGGINGFACE_ICON`     | HuggingFace 分组图标（默认官方 Logo）               |
+| `TAILSCALE_GROUP`      | 新分组名称（默认 `Tailscale`）                      |
+| `TAILSCALE_ICON`       | Tailscale 分组图标（默认本仓库爬取的官方 Logomark） |
+| `META_GROUP`           | 新分组名称（默认 `Meta`）                           |
+| `META_ICON`            | Meta 分组图标（默认本仓库爬取的官方 Logomark）      |
+| `NODESEEK_GROUP`       | 新分组名称（默认 `NodeSeek`）                       |
+| `NODESEEK_PROVIDER`    | rule-provider 名称（默认 `nodeseek`）               |
+| `NODESEEK_RULESET_URL` | NodeSeek 域名 ruleset 地址                          |
+| `NODESEEK_ICON`        | NodeSeek 分组图标（默认本仓库爬取的官方 favicon）   |
+| `GLOBAL_GROUP`         | Nyanpasu 兼容需挂载的分组名（默认 `GLOBAL`）        |
+| `SSH_GROUP`            | 分组插入的优先锚点（默认 `SSH`，huggingface 除外）  |
+| `FINAL_GROUP`          | 分组插入的兜底锚点（默认 `Final`）                  |
 
 ## 开发
 
