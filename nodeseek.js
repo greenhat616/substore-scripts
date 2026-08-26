@@ -98,13 +98,25 @@ function main(config) {
 
   // ── 2. Nyanpasu 兼容：把 NodeSeek 挂载进 GLOBAL 分组的 proxies ───────────
   // convert.js 的 GLOBAL 分组 proxies 为生成时的固定快照，不含后处理新增分组；
-  // 其虽有 include-all，但 Nyanpasu 在 GLOBAL 模式下只展示/允许选择 proxies
-  // 列表内的项，故需显式挂载（幂等）。
+  // 而 Nyanpasu 以 GLOBAL.all 的顺序枚举并展示代理组（proxies.rs:143），
+  // 未挂载的组会被静默丢弃（clash-nyanpasu#5112）。
+  // 挂载位置与上方分组插入位置保持一致（插到其后邻分组名之前），避免新分组
+  // 排到「选择代理」等原有分组之前、打乱展示顺序。
   const globalGroup = groups.find((g) => g && g.name === GLOBAL_GROUP);
-  if (globalGroup && Array.isArray(globalGroup.proxies)) {
-    if (!globalGroup.proxies.includes(NODESEEK_GROUP)) {
-      // 插在 GLOBAL 列表首位，与「新分组在前」的展示习惯一致。
-      globalGroup.proxies.unshift(NODESEEK_GROUP);
+  if (
+    globalGroup &&
+    Array.isArray(globalGroup.proxies) &&
+    !globalGroup.proxies.includes(NODESEEK_GROUP)
+  ) {
+    const selfIndex = groups.findIndex((g) => g && g.name === NODESEEK_GROUP);
+    const nextName = groups
+      .slice(selfIndex + 1)
+      .map((g) => g && g.name)
+      .find((name) => name && name !== GLOBAL_GROUP && globalGroup.proxies.includes(name));
+    if (nextName) {
+      globalGroup.proxies.splice(globalGroup.proxies.indexOf(nextName), 0, NODESEEK_GROUP);
+    } else {
+      globalGroup.proxies.push(NODESEEK_GROUP);
     }
   }
 

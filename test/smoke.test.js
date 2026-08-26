@@ -56,9 +56,13 @@ function fakeConfig() {
   const names = out["proxy-groups"].map((g) => g.name);
   assert.strictEqual(names.indexOf("HuggingFace") + 1, names.indexOf("AI服务"));
 
-  // Nyanpasu 兼容：GLOBAL 分组 proxies 应挂载 HuggingFace（首位）
+  // Nyanpasu 兼容：GLOBAL 分组 proxies 应挂载 HuggingFace，且位置镜像分组插入位置
   const globalGroup = out["proxy-groups"].find((g) => g.name === "GLOBAL");
-  assert.strictEqual(globalGroup.proxies[0], "HuggingFace", "HuggingFace 应挂载到 GLOBAL 首位");
+  assert.deepStrictEqual(
+    globalGroup.proxies,
+    ["HuggingFace", "AI服务"],
+    "HuggingFace 应挂载到 GLOBAL 且位于 AI服务 之前（镜像分组插入位置）"
+  );
 
   // 规则应插入到 category-ai-!cn 之前
   const idxHF = out.rules.indexOf("GEOSITE,huggingface,HuggingFace");
@@ -159,9 +163,13 @@ function fakeConfigTS() {
   const names = out["proxy-groups"].map((g) => g.name);
   assert.strictEqual(names.indexOf("Tailscale") + 1, names.indexOf("SSH"));
 
-  // Nyanpasu 兼容：GLOBAL 分组 proxies 应挂载 Tailscale（首位）
+  // Nyanpasu 兼容：GLOBAL 分组 proxies 应挂载 Tailscale，且位置镜像分组插入位置
   const globalGroup = out["proxy-groups"].find((g) => g.name === "GLOBAL");
-  assert.strictEqual(globalGroup.proxies[0], "Tailscale", "Tailscale 应挂载到 GLOBAL 首位");
+  assert.deepStrictEqual(
+    globalGroup.proxies,
+    ["选择代理", "Tailscale", "SSH", "Final"],
+    "Tailscale 应挂载到 GLOBAL 且位于 SSH 之前（镜像分组插入位置）"
+  );
 
   // 规则应插入到 GEOSITE,cn 之前
   const idxTS = out.rules.indexOf("GEOSITE,tailscale,Tailscale");
@@ -258,9 +266,13 @@ function fakeConfigMeta() {
   const names = out["proxy-groups"].map((g) => g.name);
   assert.strictEqual(names.indexOf("Meta") + 1, names.indexOf("SSH"));
 
-  // Nyanpasu 兼容：GLOBAL 分组 proxies 应挂载 Meta（首位）
+  // Nyanpasu 兼容：GLOBAL 分组 proxies 应挂载 Meta，且位置镜像分组插入位置
   const globalGroup = out["proxy-groups"].find((g) => g.name === "GLOBAL");
-  assert.strictEqual(globalGroup.proxies[0], "Meta", "Meta 应挂载到 GLOBAL 首位");
+  assert.deepStrictEqual(
+    globalGroup.proxies,
+    ["选择代理", "Meta", "SSH", "Final"],
+    "Meta 应挂载到 GLOBAL 且位于 SSH 之前（镜像分组插入位置）"
+  );
 
   // 规则应插入到 GFWList 兜底规则之前
   const idxMeta = out.rules.indexOf("GEOSITE,meta,Meta");
@@ -353,9 +365,13 @@ function fakeConfigNS() {
   const names = out["proxy-groups"].map((g) => g.name);
   assert.strictEqual(names.indexOf("NodeSeek") + 1, names.indexOf("SSH"));
 
-  // Nyanpasu 兼容：GLOBAL 分组 proxies 应挂载 NodeSeek（首位）且不重复
+  // Nyanpasu 兼容：GLOBAL 分组 proxies 应挂载 NodeSeek，且位置镜像分组插入位置
   const globalGroup = out["proxy-groups"].find((g) => g.name === "GLOBAL");
-  assert.strictEqual(globalGroup.proxies[0], "NodeSeek", "NodeSeek 应挂载到 GLOBAL 首位");
+  assert.deepStrictEqual(
+    globalGroup.proxies,
+    ["选择代理", "NodeSeek", "SSH", "Final"],
+    "NodeSeek 应挂载到 GLOBAL 且位于 SSH 之前（镜像分组插入位置）"
+  );
 
   // 应新增 rule-provider「nodeseek」
   const provider = out["rule-providers"] && out["rule-providers"].nodeseek;

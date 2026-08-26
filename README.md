@@ -4,7 +4,7 @@ Mihomo / Clash 全局覆写「**后处理脚本**」。在 [`powerfullz/override
 
 > 分组插入位置统一逐级回退：**优先锚点分组之前** → **「Final」分组之前** → **追加到末尾**。优先锚点：huggingface.js 为「AI服务」，其余脚本为「SSH」。
 >
-> **Nyanpasu 兼容**：`convert.js` 生成的 GLOBAL 分组 `proxies` 为生成时的固定快照（不含后处理新增分组），其虽有 `include-all`，但 Nyanpasu 在 GLOBAL 模式下只展示/允许选择 `proxies` 列表内的项（见 [clash-nyanpasu#5112](https://github.com/libnyanpasu/clash-nyanpasu/issues/5112)，上游修复前需此 workaround）。故所有脚本都会把各自新增的分组显式挂载到 GLOBAL 分组的 `proxies` 首位（幂等，不重复）。
+> **Nyanpasu 兼容**：`convert.js` 生成的 GLOBAL 分组 `proxies` 为生成时的固定快照（不含后处理新增分组）。Nyanpasu 以 `GLOBAL.all` 的**顺序**枚举并展示代理组（`proxies.rs:143`），未挂载的组会被静默丢弃（见 [clash-nyanpasu#5112](https://github.com/libnyanpasu/clash-nyanpasu/issues/5112)，上游修复前需此 workaround）。故所有脚本都会把各自新增的分组显式挂载到 GLOBAL 分组的 `proxies` 中（幂等，不重复），**挂载位置镜像分组在 `proxy-groups` 中的插入位置**（插到其后邻分组名之前，兜底追加末尾），不打乱原有展示顺序。
 
 ## huggingface.js · HuggingFace 独立分组
 
