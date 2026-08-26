@@ -44,7 +44,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add huggingface.min.js tailscale.min.js meta.min.js package.json
+          git add huggingface.min.js tailscale.min.js meta.min.js nodeseek.min.js dialer-proxy-qianzhi.min.js package.json
           git commit -m "chore(release): ${GITHUB_REF_NAME}" || echo "nothing to commit"
           git push origin HEAD:main || echo "nothing to push"
 
@@ -59,3 +59,7 @@ jobs:
             tailscale.min.js
             meta.js
             meta.min.js
+            nodeseek.js
+            nodeseek.min.js
+            dialer-proxy-qianzhi.js
+            dialer-proxy-qianzhi.min.js
