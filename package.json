@@ -1,6 +1,6 @@
 {
   "name": "substore-scripts",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Mihomo/Clash 覆写后处理脚本：将 HuggingFace / Tailscale / Meta / NodeSeek 拆分为独立 proxy group。配合 powerfullz/override-rules 使用。",
   "main": "huggingface.js",
   "scripts": {
