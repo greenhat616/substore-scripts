@@ -22,6 +22,12 @@ function fakeConfig() {
         icon: "https://example.com/ChatGPT.png",
         proxies: ["选择代理", "自动选择", "手动选择", "DIRECT"],
       },
+      {
+        name: "GLOBAL",
+        type: "select",
+        "include-all": true,
+        proxies: ["AI服务"],
+      },
     ],
     rules: [
       "GEOSITE,github,Github",
@@ -50,6 +56,10 @@ function fakeConfig() {
   const names = out["proxy-groups"].map((g) => g.name);
   assert.strictEqual(names.indexOf("HuggingFace") + 1, names.indexOf("AI服务"));
 
+  // Nyanpasu 兼容：GLOBAL 分组 proxies 应挂载 HuggingFace（首位）
+  const globalGroup = out["proxy-groups"].find((g) => g.name === "GLOBAL");
+  assert.strictEqual(globalGroup.proxies[0], "HuggingFace", "HuggingFace 应挂载到 GLOBAL 首位");
+
   // 规则应插入到 category-ai-!cn 之前
   const idxHF = out.rules.indexOf("GEOSITE,huggingface,HuggingFace");
   const idxAI = out.rules.findIndex((r) => r.includes("category-ai-!cn"));
@@ -70,6 +80,12 @@ function fakeConfig() {
   assert.strictEqual(hfGroups.length, 1, "重复执行不应产生重复分组");
   const hfRuleCount = out.rules.filter((r) => r === "GEOSITE,huggingface,HuggingFace").length;
   assert.strictEqual(hfRuleCount, 1, "重复执行不应产生重复规则");
+  const globalGroup = out["proxy-groups"].find((g) => g.name === "GLOBAL");
+  assert.strictEqual(
+    globalGroup.proxies.filter((p) => p === "HuggingFace").length,
+    1,
+    "重复执行不应在 GLOBAL 中重复挂载"
+  );
 }
 
 // 3. 缺失 AI服务 分组时的回退：Final 之前 → 末尾
@@ -108,6 +124,12 @@ function fakeConfigTS() {
       },
       { name: "SSH", type: "select", proxies: ["选择代理", "DIRECT"] },
       { name: "Final", type: "select", proxies: ["选择代理", "DIRECT"] },
+      {
+        name: "GLOBAL",
+        type: "select",
+        "include-all": true,
+        proxies: ["选择代理", "SSH", "Final"],
+      },
     ],
     rules: [
       "GEOSITE,category-ai-!cn,AI服务",
@@ -137,6 +159,10 @@ function fakeConfigTS() {
   const names = out["proxy-groups"].map((g) => g.name);
   assert.strictEqual(names.indexOf("Tailscale") + 1, names.indexOf("SSH"));
 
+  // Nyanpasu 兼容：GLOBAL 分组 proxies 应挂载 Tailscale（首位）
+  const globalGroup = out["proxy-groups"].find((g) => g.name === "GLOBAL");
+  assert.strictEqual(globalGroup.proxies[0], "Tailscale", "Tailscale 应挂载到 GLOBAL 首位");
+
   // 规则应插入到 GEOSITE,cn 之前
   const idxTS = out.rules.indexOf("GEOSITE,tailscale,Tailscale");
   const idxCN = out.rules.findIndex((r) => r.startsWith("GEOSITE,cn,"));
@@ -151,6 +177,12 @@ function fakeConfigTS() {
   assert.strictEqual(tsGroups.length, 1, "重复执行不应产生重复分组");
   const tsRuleCount = out.rules.filter((r) => r === "GEOSITE,tailscale,Tailscale").length;
   assert.strictEqual(tsRuleCount, 1, "重复执行不应产生重复规则");
+  const globalGroup = out["proxy-groups"].find((g) => g.name === "GLOBAL");
+  assert.strictEqual(
+    globalGroup.proxies.filter((p) => p === "Tailscale").length,
+    1,
+    "重复执行不应在 GLOBAL 中重复挂载"
+  );
 }
 
 // 6. 缺失锚点分组 / 无 GEOSITE,cn 规则时的回退
@@ -191,6 +223,12 @@ function fakeConfigMeta() {
       },
       { name: "SSH", type: "select", proxies: ["选择代理", "DIRECT"] },
       { name: "Final", type: "select", proxies: ["选择代理", "DIRECT"] },
+      {
+        name: "GLOBAL",
+        type: "select",
+        "include-all": true,
+        proxies: ["选择代理", "SSH", "Final"],
+      },
     ],
     rules: [
       "GEOSITE,twitter,Twitter",
@@ -220,6 +258,10 @@ function fakeConfigMeta() {
   const names = out["proxy-groups"].map((g) => g.name);
   assert.strictEqual(names.indexOf("Meta") + 1, names.indexOf("SSH"));
 
+  // Nyanpasu 兼容：GLOBAL 分组 proxies 应挂载 Meta（首位）
+  const globalGroup = out["proxy-groups"].find((g) => g.name === "GLOBAL");
+  assert.strictEqual(globalGroup.proxies[0], "Meta", "Meta 应挂载到 GLOBAL 首位");
+
   // 规则应插入到 GFWList 兜底规则之前
   const idxMeta = out.rules.indexOf("GEOSITE,meta,Meta");
   const idxGFW = out.rules.findIndex((r) => r.startsWith("RULE-SET,GFWList,"));
@@ -234,6 +276,12 @@ function fakeConfigMeta() {
   assert.strictEqual(metaGroups.length, 1, "重复执行不应产生重复分组");
   const metaRuleCount = out.rules.filter((r) => r === "GEOSITE,meta,Meta").length;
   assert.strictEqual(metaRuleCount, 1, "重复执行不应产生重复规则");
+  const globalGroup = out["proxy-groups"].find((g) => g.name === "GLOBAL");
+  assert.strictEqual(
+    globalGroup.proxies.filter((p) => p === "Meta").length,
+    1,
+    "重复执行不应在 GLOBAL 中重复挂载"
+  );
 }
 
 // 9. 缺失锚点分组 / 无 GFWList 规则时的逐级回退

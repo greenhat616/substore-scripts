@@ -15,6 +15,7 @@
  *   3. Nyanpasu 兼容：convert.js 生成的 GLOBAL 分组 proxies 为固定列表
  *      （不含后处理新增分组），需将「NodeSeek」挂载进 GLOBAL 分组的
  *      proxies，否则 Nyanpasu 在 GLOBAL 模式下无法选中该分组。
+ *      见 https://github.com/libnyanpasu/clash-nyanpasu/issues/5112
  *
  * ruleset 来源（域名集合：nodeseek.com / nodeseek.org / nodeimage.com /
  *   nodeget.com / nodequality.com / deepflood.com / ilatency.com / seek.li /

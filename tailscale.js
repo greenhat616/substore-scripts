@@ -10,6 +10,10 @@
  *      因此默认直连；用户可手动切换为任意代理分组。
  *   2. 新增 tailscale 路由规则（GEOSITE，与原始脚本风格一致），置于
  *      `GEOSITE,cn` 规则之前（找不到则置于最终 MATCH 之前）。
+ *   3. Nyanpasu 兼容：convert.js 生成的 GLOBAL 分组 proxies 为固定列表
+ *      （不含后处理新增分组），需将「Tailscale」挂载进 GLOBAL 分组的
+ *      proxies，否则 Nyanpasu 在 GLOBAL 模式下无法选中该分组。
+ *      见 https://github.com/libnyanpasu/clash-nyanpasu/issues/5112
  *
  * geosite 分类来源：v2fly/domain-list-community 仓库 data/tailscale
  *   https://github.com/v2fly/domain-list-community/blob/master/data/tailscale
@@ -28,6 +32,8 @@ const PROXY_GROUPS_MANUAL = "手动选择";
 const SSH_GROUP = "SSH";
 /** convert.js 中 PROXY_GROUPS.FINAL（分组插入位置的兜底锚点） */
 const FINAL_GROUP = "Final";
+/** convert.js 中 PROXY_GROUPS.GLOBAL（Nyanpasu 兼容需挂载的分组） */
+const GLOBAL_GROUP = "GLOBAL";
 
 /**
  * Tailscale 分组专属图标 —— Tailscale 官方 Logomark（PNG）。
@@ -81,7 +87,19 @@ function main(config) {
     }
   }
 
-  // ── 2. 新增 tailscale 分流规则 ──────────────────────────────────────────
+  // ── 2. Nyanpasu 兼容：把 Tailscale 挂载进 GLOBAL 分组的 proxies ─────────
+  // convert.js 的 GLOBAL 分组 proxies 为生成时的固定快照，不含后处理新增分组；
+  // 其虽有 include-all，但 Nyanpasu 在 GLOBAL 模式下只展示/允许选择 proxies
+  // 列表内的项，故需显式挂载（幂等）。
+  const globalGroup = groups.find((g) => g && g.name === GLOBAL_GROUP);
+  if (globalGroup && Array.isArray(globalGroup.proxies)) {
+    if (!globalGroup.proxies.includes(TAILSCALE_GROUP)) {
+      // 插在 GLOBAL 列表首位，与「新分组在前」的展示习惯一致。
+      globalGroup.proxies.unshift(TAILSCALE_GROUP);
+    }
+  }
+
+  // ── 3. 新增 tailscale 分流规则 ──────────────────────────────────────────
   // 仅用 GEOSITE（与原始脚本一致），依赖客户端 geosite.dat 的 tailscale 分类。
   const tsRule = `GEOSITE,tailscale,${TAILSCALE_GROUP}`;
 

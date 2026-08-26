@@ -8,6 +8,10 @@
  *   1. 新增「HuggingFace」proxy group（type: select），默认选中「AI服务」。
  *   2. 新增 huggingface 路由规则（GEOSITE，与原始脚本风格一致），置于
  *      `GEOSITE,category-ai-!cn` 规则之前，使 HuggingFace 流量优先命中独立分组。
+ *   3. Nyanpasu 兼容：convert.js 生成的 GLOBAL 分组 proxies 为固定列表
+ *      （不含后处理新增分组），需将「HuggingFace」挂载进 GLOBAL 分组的
+ *      proxies，否则 Nyanpasu 在 GLOBAL 模式下无法选中该分组。
+ *      见 https://github.com/libnyanpasu/clash-nyanpasu/issues/5112
  *
  * geosite 分类来源：v2fly/domain-list-community 仓库 data/huggingface
  *   https://github.com/v2fly/domain-list-community/blob/master/data/huggingface
@@ -24,6 +28,8 @@ const PROXY_GROUPS_SELECT = "选择代理";
 const PROXY_GROUPS_MANUAL = "手动选择";
 /** convert.js 中 PROXY_GROUPS.FINAL（分组插入位置的兜底锚点） */
 const FINAL_GROUP = "Final";
+/** convert.js 中 PROXY_GROUPS.GLOBAL（Nyanpasu 兼容需挂载的分组） */
+const GLOBAL_GROUP = "GLOBAL";
 
 /**
  * HuggingFace 分组专属图标 —— HuggingFace 官方 Logo（PNG）。
@@ -77,7 +83,19 @@ function main(config) {
     }
   }
 
-  // ── 2. 新增 huggingface 分流规则 ────────────────────────────────────────
+  // ── 2. Nyanpasu 兼容：把 HuggingFace 挂载进 GLOBAL 分组的 proxies ────────
+  // convert.js 的 GLOBAL 分组 proxies 为生成时的固定快照，不含后处理新增分组；
+  // 其虽有 include-all，但 Nyanpasu 在 GLOBAL 模式下只展示/允许选择 proxies
+  // 列表内的项，故需显式挂载（幂等）。
+  const globalGroup = groups.find((g) => g && g.name === GLOBAL_GROUP);
+  if (globalGroup && Array.isArray(globalGroup.proxies)) {
+    if (!globalGroup.proxies.includes(HUGGINGFACE_GROUP)) {
+      // 插在 GLOBAL 列表首位，与「新分组在前」的展示习惯一致。
+      globalGroup.proxies.unshift(HUGGINGFACE_GROUP);
+    }
+  }
+
+  // ── 3. 新增 huggingface 分流规则 ────────────────────────────────────────
   // 仅用 GEOSITE（与原始脚本一致），依赖客户端 geosite.dat 的 huggingface 分类。
   const hfRule = `GEOSITE,huggingface,${HUGGINGFACE_GROUP}`;
 

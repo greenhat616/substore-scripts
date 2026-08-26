@@ -3,6 +3,8 @@
 Mihomo / Clash 全局覆写「**后处理脚本**」。在 [`powerfullz/override-rules`](https://github.com/powerfullz/override-rules) 的 `convert.js` **之后**链式执行，在其生成的配置基础上做最小改造。
 
 > 分组插入位置统一逐级回退：**优先锚点分组之前** → **「Final」分组之前** → **追加到末尾**。优先锚点：huggingface.js 为「AI服务」，其余脚本为「SSH」。
+>
+> **Nyanpasu 兼容**：`convert.js` 生成的 GLOBAL 分组 `proxies` 为生成时的固定快照（不含后处理新增分组），其虽有 `include-all`，但 Nyanpasu 在 GLOBAL 模式下只展示/允许选择 `proxies` 列表内的项（见 [clash-nyanpasu#5112](https://github.com/libnyanpasu/clash-nyanpasu/issues/5112)，上游修复前需此 workaround）。故所有脚本都会把各自新增的分组显式挂载到 GLOBAL 分组的 `proxies` 首位（幂等，不重复）。
 
 ## huggingface.js · HuggingFace 独立分组
 
@@ -33,7 +35,6 @@ Mihomo / Clash 全局覆写「**后处理脚本**」。在 [`powerfullz/override
 
 1. 新增 **「NodeSeek」** proxy group（`type: select`），**默认选中「选择代理」**，分组插在「SSH」之前（缺失则按上方回退链）。覆盖 NodeSeek 主站及其衍生服务（NodeImage / NodeGet / NodeQuality / DeepFlood 等）——上游 `convert.js` 无 NodeSeek 专属规则，这些流量原本由 GFWList 兜底到「选择代理」，故默认行为与拆分前一致（候选项继承「选择代理」的动态地区节点列表）。
 2. 新增 rule-provider「nodeseek」（`behavior: domain`，`format: yaml`）与 `RULE-SET,nodeseek` 分流规则，置于 `RULE-SET,GFWList` 之前（逐级回退：`GEOIP,cn` / `GEOSITE,cn` → 最终 `MATCH`）。
-3. **Nyanpasu 兼容**：`convert.js` 生成的 GLOBAL 分组 `proxies` 为固定快照（不含后处理新增分组），本脚本将「NodeSeek」显式挂载到 GLOBAL 分组的 `proxies` 首位，否则 Nyanpasu 在 GLOBAL 模式下无法选中该分组。
 
 > ruleset 来源（域名集合：`nodeseek.com`、`nodeseek.org`、`nodeimage.com`、`nodeget.com`、`nodequality.com`、`deepflood.com`、`ilatency.com`、`seek.li`、`22112211.xyz`）：[clash-rulesets/nodeseek.yml](https://clash-rulesets.greenhat616.deno.net/rulesets/nodeseek.yml)。
 >
