@@ -452,3 +452,45 @@ console.log("✓ nodeseek smoke tests passed");
 }
 
 console.log("✓ all smoke tests passed");
+
+// ── nyanpasu-dns.js ──────────────────────────────────────────────────────────
+
+const nyanpasuDns = require("../nyanpasu-dns.js");
+
+// 15. 基本改造：'system' 提到首位
+{
+  const cfg = { dns: { "proxy-server-nameserver": ["223.5.5.5", "8.8.8.8"] } };
+  const out = nyanpasuDns(cfg);
+  assert.deepStrictEqual(out.dns["proxy-server-nameserver"], ["system", "223.5.5.5", "8.8.8.8"]);
+}
+
+// 16. 去重：已含 'system' 不再重复 prepend，数组整体去重
+{
+  const cfg = { dns: { "proxy-server-nameserver": ["system", "223.5.5.5", "223.5.5.5", ""] } };
+  const out = nyanpasuDns(cfg);
+  assert.deepStrictEqual(out.dns["proxy-server-nameserver"], ["system", "223.5.5.5"]);
+
+  // 'system' 在中间时也应提到首位且不重复
+  const cfg2 = { dns: { "proxy-server-nameserver": ["223.5.5.5", "system", "8.8.8.8"] } };
+  const out2 = nyanpasuDns(cfg2);
+  assert.deepStrictEqual(out2.dns["proxy-server-nameserver"], ["system", "223.5.5.5", "8.8.8.8"]);
+}
+
+// 17. 幂等：重复执行结果不变
+{
+  const cfg = { dns: { "proxy-server-nameserver": ["223.5.5.5"] } };
+  let out = nyanpasuDns(cfg);
+  out = nyanpasuDns(out);
+  assert.deepStrictEqual(out.dns["proxy-server-nameserver"], ["system", "223.5.5.5"]);
+}
+
+// 18. 健壮性：缺失/异常输入不抛错、不改动
+{
+  assert.strictEqual(nyanpasuDns(null), null);
+  const noDns = { proxies: [] };
+  assert.strictEqual(nyanpasuDns(noDns), noDns);
+  const notArray = { dns: { "proxy-server-nameserver": "223.5.5.5" } };
+  assert.strictEqual(nyanpasuDns(notArray).dns["proxy-server-nameserver"], "223.5.5.5");
+}
+
+console.log("✓ nyanpasu-dns smoke tests passed");

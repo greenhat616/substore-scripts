@@ -40,6 +40,15 @@ Mihomo / Clash 全局覆写「**后处理脚本**」。在 [`powerfullz/override
 >
 > 图标：主流图标集均无 NodeSeek 图标，故爬取官方 favicon（512px PNG，已确认背景透明）存至本仓库 [`icons/`](icons)，经 jsDelivr 引用。
 
+## nyanpasu-dns.js · DNS proxy-server-nameserver 去重
+
+改写自 [Clash Nyanpasu 官方 JavaScript 模板](https://nyanpasu.org/)，修复原模板「重复执行会反复 prepend `system`」的问题：
+
+1. 保证 `system` 位于 `dns['proxy-server-nameserver']` 首位（解析代理服务器域名时优先使用系统 DNS，避免回环）。
+2. 对该数组整体保序去重；`dns` 或该字段缺失 / 非数组时不做任何改动（与原始模板一致）。
+
+脚本**幂等**，重复执行结果不变。
+
 ## 工作原理
 
 `convert.js` 用 `GEOSITE,category-ai-!cn,AI服务` 把全部 AI 服务（含 huggingface）路由到「AI服务」分组。本脚本不改动原逻辑，仅：
@@ -62,6 +71,7 @@ https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/huggingface.min.js
 https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/tailscale.min.js
 https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/meta.min.js
 https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/nodeseek.min.js
+https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/nyanpasu-dns.min.js
 ```
 
 版本化引用：
