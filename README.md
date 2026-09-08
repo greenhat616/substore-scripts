@@ -1,8 +1,8 @@
-# substore-scripts · HuggingFace / Tailscale / Meta / NodeSeek 独立分组
+# substore-scripts · HuggingFace / Tailscale / Meta / NodeSeek / LM Studio 独立分组
 
 Mihomo / Clash 全局覆写「**后处理脚本**」。在 [`powerfullz/override-rules`](https://github.com/powerfullz/override-rules) 的 `convert.js` **之后**链式执行，在其生成的配置基础上做最小改造。
 
-> 分组插入位置统一逐级回退：**优先锚点分组之前** → **「Final」分组之前** → **追加到末尾**。优先锚点：huggingface.js 为「AI服务」，其余脚本为「SSH」。
+> 分组插入位置统一逐级回退：**优先锚点分组之前** → **「Final」分组之前** → **追加到末尾**。优先锚点：huggingface.js / lmstudio.js 为「AI服务」，其余脚本为「SSH」。
 >
 > **Nyanpasu 兼容**：`convert.js` 生成的 GLOBAL 分组 `proxies` 为生成时的固定快照（不含后处理新增分组）。Nyanpasu 以 `GLOBAL.all` 的**顺序**枚举并展示代理组（`proxies.rs:143`），未挂载的组会被静默丢弃（见 [clash-nyanpasu#5112](https://github.com/libnyanpasu/clash-nyanpasu/issues/5112)，上游修复前需此 workaround）。故所有脚本都会把各自新增的分组显式挂载到 GLOBAL 分组的 `proxies` 中（幂等，不重复），**挂载位置镜像分组在 `proxy-groups` 中的插入位置**（插到其后邻分组名之前，兜底追加末尾），不打乱原有展示顺序。
 
@@ -40,6 +40,15 @@ Mihomo / Clash 全局覆写「**后处理脚本**」。在 [`powerfullz/override
 >
 > 图标：主流图标集均无 NodeSeek 图标，故爬取官方 favicon（512px PNG，已确认背景透明）存至本仓库 [`icons/`](icons)，经 jsDelivr 引用。
 
+## lmstudio.js · LM Studio 独立分组
+
+1. 新增 **「LMStudio」** proxy group（`type: select`），**默认选中「AI服务」**，分组插在「AI服务」之前（缺失则按上方回退链）。`lmstudio.ai` 原本由 `GEOSITE,category-ai-!cn` 路由到「AI服务」，故默认行为与拆分前一致（候选项继承「AI服务」分组的动态地区节点列表）。
+2. 新增 `DOMAIN-SUFFIX,lmstudio.ai` 分流规则，置于 `GEOSITE,category-ai-!cn` 之前，使 LM Studio 流量优先命中独立分组。
+
+> 域名来源：[v2fly/domain-list-community · `data/category-ai-!cn`](https://github.com/v2fly/domain-list-community/blob/master/data/category-ai-!cn) —— `lmstudio.ai` 仅以裸域名收录在该分类中，**无 lmstudio 独立 geosite 分类**，故无法用 GEOSITE；单域名场景直接使用 `DOMAIN-SUFFIX`，无需引入 rule-provider。
+>
+> 图标：Koolson/Qure 等主流图标集均无 LM Studio 图标，故爬取官方 Logomark（Simple Icons 收录）存至本仓库 [`icons/`](icons) 并渲染为 PNG（SVG 为原始素材），经 jsDelivr 引用。
+
 ## nyanpasu-dns.js · DNS proxy-server-nameserver 去重
 
 改写自 [Clash Nyanpasu 官方 JavaScript 模板](https://nyanpasu.org/)，修复原模板「重复执行会反复 prepend `system`」的问题：
@@ -71,6 +80,7 @@ https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/huggingface.min.js
 https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/tailscale.min.js
 https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/meta.min.js
 https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/nodeseek.min.js
+https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/lmstudio.min.js
 https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/nyanpasu-dns.min.js
 ```
 
@@ -84,24 +94,26 @@ https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts@v1.0.0/huggingface.min.
 
 ## 自定义
 
-编辑 `huggingface.js` / `tailscale.js` / `meta.js` / `nodeseek.js` 顶部常量：
+编辑 `huggingface.js` / `tailscale.js` / `meta.js` / `nodeseek.js` / `lmstudio.js` 顶部常量：
 
-| 常量                   | 说明                                                |
-| ---------------------- | --------------------------------------------------- |
-| `HUGGINGFACE_GROUP`    | 新分组名称（默认 `HuggingFace`）                    |
-| `AI_SERVICE_GROUP`     | 对应 `convert.js` 的 AI 分组名（默认 `AI服务`）     |
-| `HUGGINGFACE_ICON`     | HuggingFace 分组图标（默认官方 Logo）               |
-| `TAILSCALE_GROUP`      | 新分组名称（默认 `Tailscale`）                      |
-| `TAILSCALE_ICON`       | Tailscale 分组图标（默认本仓库爬取的官方 Logomark） |
-| `META_GROUP`           | 新分组名称（默认 `Meta`）                           |
-| `META_ICON`            | Meta 分组图标（默认本仓库爬取的官方 Logomark）      |
-| `NODESEEK_GROUP`       | 新分组名称（默认 `NodeSeek`）                       |
-| `NODESEEK_PROVIDER`    | rule-provider 名称（默认 `nodeseek`）               |
-| `NODESEEK_RULESET_URL` | NodeSeek 域名 ruleset 地址                          |
-| `NODESEEK_ICON`        | NodeSeek 分组图标（默认本仓库爬取的官方 favicon）   |
-| `GLOBAL_GROUP`         | Nyanpasu 兼容需挂载的分组名（默认 `GLOBAL`）        |
-| `SSH_GROUP`            | 分组插入的优先锚点（默认 `SSH`，huggingface 除外）  |
-| `FINAL_GROUP`          | 分组插入的兜底锚点（默认 `Final`）                  |
+| 常量                   | 说明                                                          |
+| ---------------------- | ------------------------------------------------------------- |
+| `HUGGINGFACE_GROUP`    | 新分组名称（默认 `HuggingFace`）                              |
+| `AI_SERVICE_GROUP`     | 对应 `convert.js` 的 AI 分组名（默认 `AI服务`）               |
+| `HUGGINGFACE_ICON`     | HuggingFace 分组图标（默认官方 Logo）                         |
+| `TAILSCALE_GROUP`      | 新分组名称（默认 `Tailscale`）                                |
+| `TAILSCALE_ICON`       | Tailscale 分组图标（默认本仓库爬取的官方 Logomark）           |
+| `META_GROUP`           | 新分组名称（默认 `Meta`）                                     |
+| `META_ICON`            | Meta 分组图标（默认本仓库爬取的官方 Logomark）                |
+| `NODESEEK_GROUP`       | 新分组名称（默认 `NodeSeek`）                                 |
+| `NODESEEK_PROVIDER`    | rule-provider 名称（默认 `nodeseek`）                         |
+| `NODESEEK_RULESET_URL` | NodeSeek 域名 ruleset 地址                                    |
+| `NODESEEK_ICON`        | NodeSeek 分组图标（默认本仓库爬取的官方 favicon）             |
+| `LMSTUDIO_GROUP`       | 新分组名称（默认 `LMStudio`）                                 |
+| `LMSTUDIO_ICON`        | LM Studio 分组图标（默认本仓库爬取的官方 Logomark）           |
+| `GLOBAL_GROUP`         | Nyanpasu 兼容需挂载的分组名（默认 `GLOBAL`）                  |
+| `SSH_GROUP`            | 分组插入的优先锚点（默认 `SSH`，huggingface / lmstudio 除外） |
+| `FINAL_GROUP`          | 分组插入的兜底锚点（默认 `Final`）                            |
 
 ## 开发
 

@@ -1,0 +1,143 @@
+/**
+ * LM Studio 独立分组 —— Mihomo / Clash 全局覆写「后处理脚本」
+ * ---------------------------------------------------------------------------
+ * 配合 powerfullz/override-rules 的 convert.js 使用，作为「第二个」覆写脚本
+ * 在其之后执行（Clash Verge Rev / Mihomo Party / Sparkle 均支持脚本链式执行）。
+ *
+ * 入参 config 为 convert.js 已经生成的完整配置对象，本脚本在其基础上：
+ *   1. 新增「LMStudio」proxy group（type: select），默认选中「AI服务」。
+ *   2. 新增 lmstudio.ai 路由规则（DOMAIN-SUFFIX），置于
+ *      `GEOSITE,category-ai-!cn` 规则之前，使 LM Studio 流量优先命中独立分组。
+ *      （v2fly/domain-list-community 无 lmstudio 独立 geosite 分类，
+ *      lmstudio.ai 仅以裸域名收录在 data/category-ai-!cn 中，故无法用 GEOSITE，
+ *      单域名场景下直接使用 DOMAIN-SUFFIX，无需引入 rule-provider。）
+ *   3. Nyanpasu 兼容：convert.js 生成的 GLOBAL 分组 proxies 为固定列表
+ *      （不含后处理新增分组），需将「LMStudio」挂载进 GLOBAL 分组的
+ *      proxies，否则 Nyanpasu 在 GLOBAL 模式下无法选中该分组。
+ *      见 https://github.com/libnyanpasu/clash-nyanpasu/issues/5112
+ *
+ * 域名来源：v2fly/domain-list-community 仓库 data/category-ai-!cn（lmstudio.ai）
+ *   https://github.com/v2fly/domain-list-community/blob/master/data/category-ai-!cn
+ *
+ * 幂等：重复执行不会产生重复的分组或规则。
+ */
+
+/** 新分组名称 */
+const LMSTUDIO_GROUP = "LMStudio";
+/** convert.js 中 AI 分组名称（PROXY_GROUPS.AI_SERVICE） */
+const AI_SERVICE_GROUP = "AI服务";
+/** convert.js 中 PROXY_GROUPS.SELECT / MANUAL（仅在缺失 AI 分组时作兜底候选） */
+const PROXY_GROUPS_SELECT = "选择代理";
+const PROXY_GROUPS_MANUAL = "手动选择";
+/** convert.js 中 PROXY_GROUPS.FINAL（分组插入位置的兜底锚点） */
+const FINAL_GROUP = "Final";
+/** convert.js 中 PROXY_GROUPS.GLOBAL（Nyanpasu 兼容需挂载的分组） */
+const GLOBAL_GROUP = "GLOBAL";
+
+/**
+ * LM Studio 分组专属图标 —— LM Studio 官方 Logo（PNG）。
+ * Koolson/Qure 等主流图标集无 LM Studio 图标，故爬取官方 Logomark
+ * （Simple Icons 收录）存至本仓库 icons/ 目录并渲染为 PNG（SVG 为原始素材，
+ * 见 icons/lmstudio.svg）；可自行替换为其它图标集链接。
+ */
+const LMSTUDIO_ICON =
+  "https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/icons/lmstudio.png";
+
+/**
+ * @param {Record<string, any>} config convert.js 生成的完整 Mihomo 配置
+ * @returns {Record<string, any>}
+ */
+function main(config) {
+  if (!config || typeof config !== "object") return config;
+
+  const groups = Array.isArray(config["proxy-groups"]) ? config["proxy-groups"] : [];
+  const rules = Array.isArray(config["rules"]) ? config["rules"] : [];
+
+  // ── 1. 新增 LMStudio 分组 ────────────────────────────────────────────────
+  // 直接复用 convert.js 中 AI 分组（defaultProxies）的候选项：
+  //   [选择代理, 落地节点?, 地区节点…, 低倍率节点?, 手动选择, DIRECT]
+  // 这些地区节点分组由 override-rules 动态生成，因此不能写死，必须从实际配置读取。
+  const aiGroup = groups.find((g) => g && g.name === AI_SERVICE_GROUP);
+  const baseProxies =
+    aiGroup && Array.isArray(aiGroup.proxies)
+      ? aiGroup.proxies.slice()
+      : [PROXY_GROUPS_SELECT, PROXY_GROUPS_MANUAL, "DIRECT"];
+
+  // 把「AI服务」放首位 → select 默认选中首项，实现「默认选中 AI 服务」。
+  const lmsProxies = [
+    AI_SERVICE_GROUP,
+    ...baseProxies.filter((p) => p !== AI_SERVICE_GROUP && p !== LMSTUDIO_GROUP),
+  ];
+
+  if (!groups.some((g) => g && g.name === LMSTUDIO_GROUP)) {
+    const lmsGroup = {
+      name: LMSTUDIO_GROUP,
+      type: "select",
+      icon: LMSTUDIO_ICON,
+      proxies: lmsProxies, // select 类型默认选中数组首项 → AI服务
+    };
+
+    // 插入位置逐级回退：「AI服务」之前 → 「Final」之前 → 末尾。
+    const aiIndex = groups.findIndex((g) => g && g.name === AI_SERVICE_GROUP);
+    if (aiIndex >= 0) groups.splice(aiIndex, 0, lmsGroup);
+    else {
+      const finalIndex = groups.findIndex((g) => g && g.name === FINAL_GROUP);
+      if (finalIndex >= 0) groups.splice(finalIndex, 0, lmsGroup);
+      else groups.push(lmsGroup);
+    }
+  }
+
+  // ── 2. Nyanpasu 兼容：把 LMStudio 挂载进 GLOBAL 分组的 proxies ───────────
+  // convert.js 的 GLOBAL 分组 proxies 为生成时的固定快照，不含后处理新增分组；
+  // 而 Nyanpasu 以 GLOBAL.all 的顺序枚举并展示代理组（proxies.rs:143），
+  // 未挂载的组会被静默丢弃（clash-nyanpasu#5112）。
+  // 挂载位置与上方分组插入位置保持一致（插到其后邻分组名之前），避免新分组
+  // 排到「选择代理」等原有分组之前、打乱展示顺序。
+  const globalGroup = groups.find((g) => g && g.name === GLOBAL_GROUP);
+  if (
+    globalGroup &&
+    Array.isArray(globalGroup.proxies) &&
+    !globalGroup.proxies.includes(LMSTUDIO_GROUP)
+  ) {
+    const selfIndex = groups.findIndex((g) => g && g.name === LMSTUDIO_GROUP);
+    const nextName = groups
+      .slice(selfIndex + 1)
+      .map((g) => g && g.name)
+      .find((name) => name && name !== GLOBAL_GROUP && globalGroup.proxies.includes(name));
+    if (nextName) {
+      globalGroup.proxies.splice(globalGroup.proxies.indexOf(nextName), 0, LMSTUDIO_GROUP);
+    } else {
+      globalGroup.proxies.push(LMSTUDIO_GROUP);
+    }
+  }
+
+  // ── 3. 新增 lmstudio.ai 分流规则 ──────────────────────────────────────────
+  // geosite 无 lmstudio 独立分类（lmstudio.ai 仅收录在 category-ai-!cn 中），
+  // 单域名场景直接使用 DOMAIN-SUFFIX。
+  const lmsRule = `DOMAIN-SUFFIX,lmstudio.ai,${LMSTUDIO_GROUP}`;
+
+  // 去重：移除可能已存在的同名规则后再插入。
+  const deduped = rules.filter((r) => r !== lmsRule);
+
+  // 插到 category-ai-!cn 之前，确保 LM Studio 优先于通用 AI 规则命中。
+  const aiRuleIndex = deduped.findIndex(
+    (r) => typeof r === "string" && r.includes("category-ai-!cn")
+  );
+  if (aiRuleIndex >= 0) deduped.splice(aiRuleIndex, 0, lmsRule);
+  else deduped.unshift(lmsRule);
+
+  config["proxy-groups"] = groups;
+  config["rules"] = deduped;
+  return config;
+}
+
+// 全局入口（与 convert.js 一致的覆写脚本约定）
+if (typeof globalThis !== "undefined") {
+  // eslint-disable-next-line no-undef
+  globalThis.main = main;
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = main;
+  module.exports.main = main;
+}

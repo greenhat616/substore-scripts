@@ -10,6 +10,7 @@ const main = require("../huggingface.js");
 const tailscale = require("../tailscale.js");
 const meta = require("../meta.js");
 const nodeseek = require("../nodeseek.js");
+const lmstudio = require("../lmstudio.js");
 const dialerProxy = require("../dialer-proxy-qianzhi.js");
 
 function fakeConfig() {
@@ -421,9 +422,108 @@ function fakeConfigNS() {
 
 console.log("✓ nodeseek smoke tests passed");
 
+// ── lmstudio.js ──────────────────────────────────────────────────────────────
+
+function fakeConfigLMS() {
+  return {
+    proxies: [{ name: "node-1" }],
+    "proxy-groups": [
+      {
+        name: "AI服务",
+        type: "select",
+        icon: "https://example.com/ChatGPT.png",
+        proxies: ["选择代理", "自动选择", "手动选择", "DIRECT"],
+      },
+      {
+        name: "GLOBAL",
+        type: "select",
+        "include-all": true,
+        proxies: ["AI服务"],
+      },
+    ],
+    rules: [
+      "GEOSITE,github,Github",
+      "GEOSITE,category-ai-!cn,AI服务",
+      "MATCH,Final",
+    ],
+  };
+}
+
+// 13. 基本改造
+{
+  const out = lmstudio(fakeConfigLMS());
+  const lms = out["proxy-groups"].find((g) => g.name === "LMStudio");
+  assert.ok(lms, "应新增 LMStudio 分组");
+  assert.strictEqual(lms.type, "select");
+  assert.strictEqual(lms.proxies[0], "AI服务", "默认选中项应为 AI服务");
+  assert.ok(/lmstudio/i.test(lms.icon), "应使用 LM Studio 专属图标");
+  // 候选项应继承 AI 分组的动态地区节点列表
+  assert.deepStrictEqual(
+    lms.proxies,
+    ["AI服务", "选择代理", "自动选择", "手动选择", "DIRECT"],
+    "候选项应为 [AI服务, 选择代理, 地区节点…, 手动选择, DIRECT]"
+  );
+
+  // LMStudio 分组应插在 AI服务 之前
+  const names = out["proxy-groups"].map((g) => g.name);
+  assert.strictEqual(names.indexOf("LMStudio") + 1, names.indexOf("AI服务"));
+
+  // Nyanpasu 兼容：GLOBAL 分组 proxies 应挂载 LMStudio，且位置镜像分组插入位置
+  const globalGroup = out["proxy-groups"].find((g) => g.name === "GLOBAL");
+  assert.deepStrictEqual(
+    globalGroup.proxies,
+    ["LMStudio", "AI服务"],
+    "LMStudio 应挂载到 GLOBAL 且位于 AI服务 之前（镜像分组插入位置）"
+  );
+
+  // 规则应插入到 category-ai-!cn 之前
+  const idxLMS = out.rules.indexOf("DOMAIN-SUFFIX,lmstudio.ai,LMStudio");
+  const idxAI = out.rules.findIndex((r) => r.includes("category-ai-!cn"));
+  assert.ok(idxLMS >= 0 && idxLMS < idxAI, "lmstudio.ai 规则应在 category-ai-!cn 之前");
+}
+
+// 14. 幂等：重复执行不产生重复分组/规则
+{
+  let out = lmstudio(fakeConfigLMS());
+  out = lmstudio(out);
+  const lmsGroups = out["proxy-groups"].filter((g) => g.name === "LMStudio");
+  assert.strictEqual(lmsGroups.length, 1, "重复执行不应产生重复分组");
+  const lmsRuleCount = out.rules.filter((r) => r === "DOMAIN-SUFFIX,lmstudio.ai,LMStudio").length;
+  assert.strictEqual(lmsRuleCount, 1, "重复执行不应产生重复规则");
+  const globalGroup = out["proxy-groups"].find((g) => g.name === "GLOBAL");
+  assert.strictEqual(
+    globalGroup.proxies.filter((p) => p === "LMStudio").length,
+    1,
+    "重复执行不应在 GLOBAL 中重复挂载"
+  );
+}
+
+// 15. 缺失 AI服务 分组时的回退：Final 之前 → 末尾
+{
+  // 有 Final 分组时插到其之前
+  const cfgWithFinal = {
+    "proxy-groups": [{ name: "选择代理", type: "select", proxies: ["DIRECT"] }, { name: "Final", type: "select", proxies: ["DIRECT"] }],
+    rules: ["MATCH,Final"],
+  };
+  const outF = lmstudio(cfgWithFinal);
+  const namesF = outF["proxy-groups"].map((g) => g.name);
+  assert.strictEqual(namesF.indexOf("LMStudio") + 1, namesF.indexOf("Final"), "无 AI服务 时应插在 Final 之前");
+
+  // 均无则追加到末尾
+  const cfg = { "proxy-groups": [], rules: ["MATCH,Final"] };
+  const out = lmstudio(cfg);
+  const lms = out["proxy-groups"].find((g) => g.name === "LMStudio");
+  assert.ok(lms, "无 AI服务 分组时仍应创建 LMStudio 分组");
+  assert.strictEqual(lms.proxies[0], "AI服务");
+  // 无 category-ai-!cn 时规则前置
+  assert.strictEqual(out.rules[0], "DOMAIN-SUFFIX,lmstudio.ai,LMStudio");
+}
+
+console.log("✓ lmstudio smoke tests passed");
+
 // ── dialer-proxy-qianzhi.js ────────────────────────────────────────────────
 
-// 13. 命中条件：socks5/http 或名称含家宽关键词，满足其一即注入 dialer-proxy
+// 16. 命中条件：socks5/http 或名称含家宽关键词，满足其一即注入 dialer-proxy
 {
   const cfg = {
     proxies: [
@@ -442,7 +542,7 @@ console.log("✓ nodeseek smoke tests passed");
   assert.ok(!("dialer-proxy" in out.proxies[4]), "均不命中不应注入");
 }
 
-// 14. 健壮性：缺失/异常输入不抛错
+// 17. 健壮性：缺失/异常输入不抛错
 {
   assert.strictEqual(dialerProxy(null), null);
   const cfg = { proxies: null };
@@ -457,14 +557,14 @@ console.log("✓ all smoke tests passed");
 
 const nyanpasuDns = require("../nyanpasu-dns.js");
 
-// 15. 基本改造：'system' 提到首位
+// 18. 基本改造：'system' 提到首位
 {
   const cfg = { dns: { "proxy-server-nameserver": ["223.5.5.5", "8.8.8.8"] } };
   const out = nyanpasuDns(cfg);
   assert.deepStrictEqual(out.dns["proxy-server-nameserver"], ["system", "223.5.5.5", "8.8.8.8"]);
 }
 
-// 16. 去重：已含 'system' 不再重复 prepend，数组整体去重
+// 19. 去重：已含 'system' 不再重复 prepend，数组整体去重
 {
   const cfg = { dns: { "proxy-server-nameserver": ["system", "223.5.5.5", "223.5.5.5", ""] } };
   const out = nyanpasuDns(cfg);
@@ -476,7 +576,7 @@ const nyanpasuDns = require("../nyanpasu-dns.js");
   assert.deepStrictEqual(out2.dns["proxy-server-nameserver"], ["system", "223.5.5.5", "8.8.8.8"]);
 }
 
-// 17. 幂等：重复执行结果不变
+// 20. 幂等：重复执行结果不变
 {
   const cfg = { dns: { "proxy-server-nameserver": ["223.5.5.5"] } };
   let out = nyanpasuDns(cfg);
@@ -484,7 +584,7 @@ const nyanpasuDns = require("../nyanpasu-dns.js");
   assert.deepStrictEqual(out.dns["proxy-server-nameserver"], ["system", "223.5.5.5"]);
 }
 
-// 18. 健壮性：缺失/异常输入不抛错、不改动
+// 21. 健壮性：缺失/异常输入不抛错、不改动
 {
   assert.strictEqual(nyanpasuDns(null), null);
   const noDns = { proxies: [] };
