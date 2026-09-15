@@ -594,3 +594,50 @@ const nyanpasuDns = require("../nyanpasu-dns.js");
 }
 
 console.log("✓ nyanpasu-dns smoke tests passed");
+
+// ── 632079-poko-bypass.js ────────────────────────────────────────────────────
+
+const pokoBypass = require("../632079-poko-bypass.js");
+
+// 22. 基本改造：两条 DIRECT 规则置于所有规则之前
+{
+  const cfg = { rules: ["GEOSITE,cn,直连", "GEOIP,CN,直连", "MATCH,Final"] };
+  const out = pokoBypass(cfg);
+  assert.deepStrictEqual(
+    out.rules,
+    [
+      "DOMAIN-SUFFIX,poko.632079.xyz,DIRECT",
+      "DOMAIN-SUFFIX,node.632079.xyz,DIRECT",
+      "GEOSITE,cn,直连",
+      "GEOIP,CN,直连",
+      "MATCH,Final",
+    ],
+    "两条 DIRECT 规则应按序置于所有规则之前"
+  );
+}
+
+// 23. 幂等：重复执行不产生重复规则
+{
+  let out = pokoBypass({ rules: ["DOMAIN-SUFFIX,poko.632079.xyz,DIRECT", "MATCH,Final"] });
+  out = pokoBypass(out);
+  assert.strictEqual(
+    out.rules.filter((r) => r === "DOMAIN-SUFFIX,poko.632079.xyz,DIRECT").length,
+    1,
+    "重复执行不应产生重复规则"
+  );
+  assert.deepStrictEqual(out.rules.slice(0, 2), [
+    "DOMAIN-SUFFIX,poko.632079.xyz,DIRECT",
+    "DOMAIN-SUFFIX,node.632079.xyz,DIRECT",
+  ]);
+}
+
+// 24. 健壮性：缺失/异常输入不抛错
+{
+  assert.strictEqual(pokoBypass(null), null);
+  assert.deepStrictEqual(pokoBypass({}).rules, [
+    "DOMAIN-SUFFIX,poko.632079.xyz,DIRECT",
+    "DOMAIN-SUFFIX,node.632079.xyz,DIRECT",
+  ]);
+}
+
+console.log("✓ 632079-poko-bypass smoke tests passed");

@@ -58,6 +58,12 @@ Mihomo / Clash 全局覆写「**后处理脚本**」。在 [`powerfullz/override
 
 脚本**幂等**，重复执行结果不变。
 
+## 632079-poko-bypass.js · 632079.xyz 个人服务直连
+
+为 `*.poko.632079.xyz` 与 `*.node.632079.xyz` 添加 `DOMAIN-SUFFIX,…,DIRECT` 规则，**置于所有规则之前**（最高优先级），保证这两个子域（含域自身与全部下级子域）始终直连、不走代理。不新增分组，仅前置规则。
+
+脚本**幂等**，重复执行结果不变。
+
 ## 工作原理
 
 `convert.js` 用 `GEOSITE,category-ai-!cn,AI服务` 把全部 AI 服务（含 huggingface）路由到「AI服务」分组。本脚本不改动原逻辑，仅：
@@ -82,6 +88,7 @@ https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/meta.min.js
 https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/nodeseek.min.js
 https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/lmstudio.min.js
 https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/nyanpasu-dns.min.js
+https://cdn.jsdelivr.net/gh/greenhat616/substore-scripts/632079-poko-bypass.min.js
 ```
 
 版本化引用：
